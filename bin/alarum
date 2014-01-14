@@ -3,21 +3,34 @@
 # 5. once we've sent an alert, should we subdue the alerting somehow
 #  so we're not repeating the alert every iteration?
 # 5.5 if we could reply 'shut up'/'ack' to the xmpp, that would be extra cool
-# 6. find out why our tls connect is failing.  maybe it's certificates
+# 6. TLS is failing intermittently? fun and games
 # 7 we're not doing graphs yet
 # 8. reload config on SIGHUP
 # 9. why do we show as offline?
 # 10. figure out how/where to build for simply puppet install
 
+require 'trollop'
 require 'errand'
 require 'xmpp4r'
 require 'yaml'
+require 'ostruct'
 
 require 'alarum/jabber_connection'
 
-$config = YAML.load_file("alarum.yml")
+$opts = Trollop.options do
+  opt :config, "Configuration file", default: "/etc/alarum.yml"
+  opt :verbose, "Spew", default: false
+  opt :debug, "Spew more (inc. xmppr4 debug output)", default: false
+end
 
-$jabber ||= Alarum::JabberConnection.new_from_yaml($config['configuration']['xmpp'])
+$config = YAML.load_file($opts[:config])
+xmpp_yml = $config['configuration']['xmpp']
+if $opts[:debug]
+  $opts[:verbose] ||= true
+  xmpp_yml["debug"] ||= true
+end
+
+$jabber ||= Alarum::JabberConnection.new_from_yaml(xmpp_yml)
 
 # I'm grateful to Array#zip for existing, but not for its syntax
 def zipmany(arrays)
