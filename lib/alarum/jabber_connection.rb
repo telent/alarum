@@ -1,6 +1,7 @@
 class Alarum::JabberConnection
   def self.new_from_yaml(xmpp)
     self.new(debug: xmpp['debug'],
+             allow_tls: xmpp['allow_tls'],
              server: xmpp['server'],
              jid: xmpp['jid'],
              password: xmpp['password'].unpack('m').first)
@@ -9,7 +10,7 @@ class Alarum::JabberConnection
     Jabber::debug = args[:debug]
     jid = Jabber::JID.new(args[:jid])
     @client = Jabber::Client.new(jid).tap {|c|
-      c.allow_tls = false         # xmpp4r won't reliably connect to my ejabberd with this enabled
+      c.allow_tls = args[:allow_tls]
       c.connect(args[:server])
       c.auth(args[:password])
       c.send(Jabber::Presence.new.set_type(':available'))
