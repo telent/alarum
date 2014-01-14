@@ -7,7 +7,7 @@
 # 7 we're not doing graphs yet
 # 8. reload config on SIGHUP
 # 9. why do we show as offline?
-# 10. figure out hw to build for puppet install
+# 10. figure out how/where to build for simply puppet install
 
 require 'errand'
 require 'xmpp4r'
@@ -36,12 +36,13 @@ def alert(recipient, m)
   $jabber.send message
 end
 
+# I'm grateful to Array#zip for existing, but not for its syntax
 def zipmany(arrays)
   frst,*rst = arrays
   frst.zip(*rst)
 end
 
-def run_rrd(key, config)
+def run_each_database(key, config)
   rrd=Errand.new(filename: config['datafile'])
   now = Time.now.to_i
   config['limits'].each do |limit|
@@ -82,43 +83,8 @@ END {
 }
 
 while true
-  $config['database'].keys.each do |key|
-    run_rrd(key, $config['database'][key])
+  $config['database'].each do |key, db|
+    run_each_database(key, db)
   end
   sleep 60
-end
-
-
-
-inputs = Dir.glob(ARGV[0]+"/**/*.rrd")
-
-IMPORTANT=Regexp.new(%w(rotuer.+if_octets loaclhost.lan/sensors loaclhost.lan/memory/ loaclhost.lan/disk-md1/disk_ops).join('|'))
-
-SKIP=Regexp.new(%w(fanspeed-fan3 disk-sd[abcde]).join('|'))
-
-important = inputs.grep(IMPORTANT)
-skip = inputs.grep(SKIP)
-
-pngs = (important + (inputs-important-skip)).map { |input|
-  output = input.split(%r{[\.\/]})[1..-2].join("_") + ".png"
-  info = `rrdtool info #{input}`
-  ds = info.each_line.grep(%r{^ds\[(\w+)\].index = (\d+)}) { |line| $1 }
-  cmd = "rrdtool graph temp.png -w 600 -h 150 " +
-  " -t " + input + " " +
-  ds.map{|name| "DEF:#{name}=#{input}:#{name}:AVERAGE" }.join(" ")  +
-  " " +
-  ds.each_with_index.map {|name,i| %Q[LINE1:#{name}\##{color[i]}:"#{name}"] }.join(" ")
-
-  warn cmd
-  system(cmd) and File.rename("temp.png", output)
-  [output, input]
-}
-out = "<html><head><title>collectd #{Time.now}</title></head><body>" +
-  pngs.map{|name, input|
-  "#{input}<br><a href=#{name.inspect}><img src=#{name.inspect}></a><br>\n"
-}.join +
-  "</body></html>"
-
-File.open("out.html","w") do |f|
-  f.write out
 end
