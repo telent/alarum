@@ -13,28 +13,11 @@ require 'errand'
 require 'xmpp4r'
 require 'yaml'
 
+require 'alarum/jabber_connection'
+
 $config = YAML.load_file("alarum.yml")
 
-def connect_jabber(xmpp)
-  Jabber::debug = xmpp['debug']
-  jid = Jabber::JID.new(xmpp['jid'])
-  Jabber::Client.new(jid).tap {|c|
-    c.allow_tls = false
-    pw = xmpp['password'].unpack('m').first
-    c.connect(xmpp['server'])
-    c.auth(pw)
-    c.send(Jabber::Presence.new.set_type(':available'))
-  }
-end
-
-$jabber ||= connect_jabber($config['configuration']['xmpp'])
-
-def alert(recipient, m)
-  message = Jabber::Message.new(recipient, m).
-    set_type(:chat)
-  warn [Time.now, m]
-  $jabber.send message
-end
+$jabber ||= Alarum::JabberConnection.new_from_yaml($config['configuration']['xmpp'])
 
 # I'm grateful to Array#zip for existing, but not for its syntax
 def zipmany(arrays)
@@ -60,7 +43,7 @@ def run_each_database(key, config)
     l = limit['exceeding']
     rcpt = limit['alert']
     if av > l then
-      alert rcpt, "#{key} #{expr} value #{av.to_i} exceeded limit #{l} over #{limit['interval']} seconds"
+      $jabber.alert rcpt, "#{key} #{expr} value #{av.to_i} exceeded limit #{l} over #{limit['interval']} seconds"
     else
       warn [Time.now,
             "#{key} #{expr} value #{av.to_i} inside limit #{l} over #{limit['interval']} seconds"]
@@ -73,12 +56,12 @@ all_recipients = $config['database'].values.flat_map{|d|
 }.uniq
 
 all_recipients.each do |r|
-  alert r, "restarted #{$0} on #{Socket.gethostname}"
+  $jabber.alert r, "restarted #{$0} on #{Socket.gethostname}"
 end
 
 END {
   all_recipients.each do |r|
-    alert r, "#{$0} stopped on #{Socket.gethostname}: #{$!}"
+    $jabber.alert r, "#{$0} stopped on #{Socket.gethostname}: #{$!}"
   end
 }
 
