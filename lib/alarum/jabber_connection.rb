@@ -15,9 +15,11 @@ class Alarum::JabberConnection
       c.send(Jabber::Presence.new.set_type(':available'))
     }
   end
-  def alert(recipient, m)
-    message = Jabber::Message.new(recipient, m).set_type(:chat)
+  def alert(m, recipients)
     warn [Time.now, m]
-    @client.send message
+    Array(recipients).each do |r|
+      message = Jabber::Message.new(r, m).set_type(:chat)
+      @client.send message
+    end
   end
 end

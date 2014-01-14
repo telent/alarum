@@ -41,9 +41,8 @@ def run_each_database(key, config)
     }
     av = result_series.compact.reduce(:+) / result_series.length
     l = limit['exceeding']
-    rcpt = limit['alert']
     if av > l then
-      $jabber.alert rcpt, "#{key} #{expr} value #{av.to_i} exceeded limit #{l} over #{limit['interval']} seconds"
+      $jabber.alert "#{key} #{expr} value #{av.to_i} exceeded limit #{l} over #{limit['interval']} seconds", limit['alert']
     else
       warn [Time.now,
             "#{key} #{expr} value #{av.to_i} inside limit #{l} over #{limit['interval']} seconds"]
@@ -55,14 +54,10 @@ all_recipients = $config['database'].values.flat_map{|d|
   d['limits'].map{|l| l['alert']}
 }.uniq
 
-all_recipients.each do |r|
-  $jabber.alert r, "restarted #{$0} on #{Socket.gethostname}"
-end
+$jabber.alert "restarted #{$0} on #{Socket.gethostname}", all_recipients
 
 END {
-  all_recipients.each do |r|
-    $jabber.alert r, "#{$0} stopped on #{Socket.gethostname}: #{$!}"
-  end
+  $jabber.alert "#{$0} stopped on #{Socket.gethostname}: #{$!}", all_recipients
 }
 
 while true
