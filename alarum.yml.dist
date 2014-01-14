@@ -1,0 +1,27 @@
+configuration:
+  xmpp:
+    jid: computer@example.com
+    # if aserver is unsupplied, it resolves SRV records for the jid
+    # server: jabber.example.com
+    # password is base64 encoded to discourage shoulder-surfing.  
+    # THIS IS NOT A SECURITY MEASURE
+    password: MTI3LjAuMC4xCWxvY2FsaG9zdAo=
+    debug: false
+
+database:
+  wan:
+    datafile: '/var/lib/collectd/rrd/rotuer/interface/if_octets-pppoe-WAN.rrd'
+    graphs:
+      - {values: ["tx","rx","tx,rx,+"], interval: 86400}
+    limits:
+      - value: rx+tx
+        exceeding: 46000
+        interval: 86400
+        alert: dan@example.com
+        repeat: 3600
+      - value: rx+tx
+        exceeding: 5000000
+        interval: 600
+        alert: dan@example.com
+        repeat: 600
+ 

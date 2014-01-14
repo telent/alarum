@@ -1,0 +1,124 @@
+#!/usr/bin/ruby
+
+# 5. once we've sent an alert, should we subdue the alerting somehow
+#  so we're not repeating the alert every iteration?
+# 5.5 if we could reply 'shut up'/'ack' to the xmpp, that would be extra cool
+# 6. find out why our tls connect is failing.  maybe it's certificates
+# 7 we're not doing graphs yet
+# 8. reload config on SIGHUP
+# 9. why do we show as offline?
+# 10. figure out hw to build for puppet install
+
+require 'errand'
+require 'xmpp4r'
+require 'yaml'
+
+$config = YAML.load_file("alarum.yml")
+
+def connect_jabber(xmpp)
+  Jabber::debug = xmpp['debug']
+  jid = Jabber::JID.new(xmpp['jid'])
+  Jabber::Client.new(jid).tap {|c|
+    c.allow_tls = false
+    pw = xmpp['password'].unpack('m').first
+    c.connect(xmpp['server'])
+    c.auth(pw)
+    c.send(Jabber::Presence.new.set_type(':available'))
+  }
+end
+
+$jabber ||= connect_jabber($config['configuration']['xmpp'])
+
+def alert(recipient, m)
+  message = Jabber::Message.new(recipient, m).
+    set_type(:chat)
+  warn [Time.now, m]
+  $jabber.send message
+end
+
+def zipmany(arrays)
+  frst,*rst = arrays
+  frst.zip(*rst)
+end
+
+def run_rrd(key, config)
+  rrd=Errand.new(filename: config['datafile'])
+  now = Time.now.to_i
+  config['limits'].each do |limit|
+    data = rrd.fetch(start: Time.now.to_i - limit['interval'])[:data]
+    zipped = zipmany(data.values)
+    expr = limit['value']
+    result_series = zipped.map {|vals|
+      if vals.any?(&:nan?)
+        nil
+      else
+        OpenStruct.new(Hash[data.keys.zip(vals)]).instance_eval(expr)
+      end
+    }
+    av = result_series.compact.reduce(:+) / result_series.length
+    l = limit['exceeding']
+    rcpt = limit['alert']
+    if av > l then
+      alert rcpt, "#{key} #{expr} value #{av.to_i} exceeded limit #{l} over #{limit['interval']} seconds"
+    else
+      warn [Time.now,
+            "#{key} #{expr} value #{av.to_i} inside limit #{l} over #{limit['interval']} seconds"]
+    end
+  end
+end
+
+all_recipients = $config['database'].values.flat_map{|d|
+  d['limits'].map{|l| l['alert']}
+}.uniq
+
+all_recipients.each do |r|
+  alert r, "restarted #{$0} on #{Socket.gethostname}"
+end
+
+END {
+  all_recipients.each do |r|
+    alert r, "#{$0} stopped on #{Socket.gethostname}: #{$!}"
+  end
+}
+
+while true
+  $config['database'].keys.each do |key|
+    run_rrd(key, $config['database'][key])
+  end
+  sleep 60
+end
+
+
+
+inputs = Dir.glob(ARGV[0]+"/**/*.rrd")
+
+IMPORTANT=Regexp.new(%w(rotuer.+if_octets loaclhost.lan/sensors loaclhost.lan/memory/ loaclhost.lan/disk-md1/disk_ops).join('|'))
+
+SKIP=Regexp.new(%w(fanspeed-fan3 disk-sd[abcde]).join('|'))
+
+important = inputs.grep(IMPORTANT)
+skip = inputs.grep(SKIP)
+
+pngs = (important + (inputs-important-skip)).map { |input|
+  output = input.split(%r{[\.\/]})[1..-2].join("_") + ".png"
+  info = `rrdtool info #{input}`
+  ds = info.each_line.grep(%r{^ds\[(\w+)\].index = (\d+)}) { |line| $1 }
+  cmd = "rrdtool graph temp.png -w 600 -h 150 " +
+  " -t " + input + " " +
+  ds.map{|name| "DEF:#{name}=#{input}:#{name}:AVERAGE" }.join(" ")  +
+  " " +
+  ds.each_with_index.map {|name,i| %Q[LINE1:#{name}\##{color[i]}:"#{name}"] }.join(" ")
+
+  warn cmd
+  system(cmd) and File.rename("temp.png", output)
+  [output, input]
+}
+out = "<html><head><title>collectd #{Time.now}</title></head><body>" +
+  pngs.map{|name, input|
+  "#{input}<br><a href=#{name.inspect}><img src=#{name.inspect}></a><br>\n"
+}.join +
+  "</body></html>"
+
+File.open("out.html","w") do |f|
+  f.write out
+end
