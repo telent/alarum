@@ -57,8 +57,9 @@ def run_each_database(key, config)
     if av > l then
       $jabber.alert "#{key} #{expr} value #{av.to_i} exceeded limit #{l} over #{limit['interval']} seconds", limit['alert']
     else
-      warn [Time.now,
-            "#{key} #{expr} value #{av.to_i} inside limit #{l} over #{limit['interval']} seconds"]
+      $opts[:verbose] and
+        warn [Time.now,
+              "#{key} #{expr} value #{av.to_i} inside limit #{l} over #{limit['interval']} seconds"]
     end
   end
 end
