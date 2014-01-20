@@ -50,8 +50,12 @@ def run_each_database(key, config)
       else
         OpenStruct.new(Hash[data.keys.zip(vals)]).instance_eval(expr)
       end
-    }
-    av = result_series.compact.reduce(:+) / result_series.length
+    }.compact
+    if result_series.empty?
+      $jabber.alert "#{key} #{expr} no data collected over #{limit['interval']} seconds?", limit['alert']
+      next
+    end
+    av = result_series.reduce(:+) / result_series.length
     l = limit['exceeding']
     if av > l then
       $jabber.alert "#{key} #{expr} value #{av.to_i} exceeded limit #{l} over #{limit['interval']} seconds", limit['alert']
