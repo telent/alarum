@@ -1,3 +1,5 @@
+require 'xmpp4r'
+
 class Alarum::JabberConnection
   def self.new_from_yaml(xmpp)
     self.new(debug: xmpp['debug'],
